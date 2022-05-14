@@ -1,0 +1,142 @@
+<html>
+    <meta charset="utf-8">
+    <head>
+        <title>SciLink</title>
+        <link rel="stylesheet" type="text/css" href="src/style.css">
+        <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css" />
+    </head>
+    <body>
+        <div class="bodyBox" id="app">
+            <div id='nodeCanvas' class="canvas"></div>
+            <div class="editBox">
+                <el-container class="container">
+                    <el-header>
+                        <span style="font-size: 14px;">节点编辑：</span>
+                        <el-radio v-model="nodeTypeSelect" label="all" size="large">全部</el-radio>
+                        <el-radio v-model="nodeTypeSelect" label="element" size="large">物理量</el-radio>
+                        <el-radio v-model="nodeTypeSelect" label="equation" size="large">公式</el-radio>
+                        <el-radio v-model="nodeTypeSelect" label="object" size="large">事物</el-radio>
+                        <el-radio v-model="nodeTypeSelect" label="space" size="large">空间</el-radio>
+                        <el-radio v-model="nodeTypeSelect" label="time" size="large">时间</el-radio>
+                        <el-radio v-model="nodeTypeSelect" label="process" size="large">过程</el-radio>
+                        <el-button @click="openAddNode">增加节点</el-button>
+                    </el-header>
+                    <el-main >
+                        <div class="main">
+                            <div class="mainTip">点击下列节点以编辑</div>
+                            <div v-for="node in renderNodeList" :key="node.id" :class="node.type">
+                                <div class="nodePin" v-if="node.type == 'space'">
+                                    <img src="src/pin-outline.svg"/>
+                                </div>
+                                <div class="nodeTime" v-if="node.type == 'time'">
+                                    <img src="src/clock-outline.svg"/>
+                                </div>
+                                <div class="nodeText">
+                                    <div class="nodeID" v-if="node.type != 'element' && node.type != 'equation'">{{node.id}}</div>
+                                    <div class="nodeName" v-if="node.type != 'element' && node.type != 'equation'">{{node.name}}</div>
+                                    <div class="nodeLatex" v-if="node.type == 'element' || node.type == 'equation'"><img :src="node.base64"/></div>
+                                    <div class="nodeName" v-if="node.type == 'element' || node.type == 'equation'">{{node.id}} <span style="color:#a9a9a9">|</span> {{node.name}}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </el-main>
+                </el-container>
+
+                <el-dialog v-model="showAddDialog" title="添加节点" width="40%">
+
+                    <el-form :model="newNodeForm" label-width="100px" :rules="formRule" ref="addNode">
+                        <el-form-item label="类型：" prop="type">
+                            <el-select v-model="newNodeForm.type" class="m-2" placeholder="选择类型" @change="addNodeChangeType">
+                                <el-option v-for="type in nodeType" :key="type.value" :label="type.label" :value="type.value"/>
+                            </el-select>
+                        </el-form-item>
+                        <el-form-item label="ID：" prop="id">
+                            <el-input v-model="newNodeForm.id"></el-input>
+                        </el-form-item>
+                        <el-form-item label="名称：" prop="name">
+                            <el-input v-model="newNodeForm.name"></el-input>
+                        </el-form-item>
+                        <el-form-item label="Latex公式：" prop="latex" v-if="newNodeForm.type == 'element' || newNodeForm.type == 'equation'">
+                            <el-input v-model="newNodeForm.latex" type="textarea" autosize @input="svgPreview"></el-input>
+                            <el-form-item label="公式行数" style="margin-top:5px;"><el-input-number v-model="newNodeForm.latexHeight"  :min="1" :max="30" :step="0.5"></el-input-number></el-form-item>
+                            <div class="latexPreview">
+                                <img :src="newNodeForm.base64" />
+                            </div>
+                        </el-form-item>
+                        <el-form-item label="时间范围：" prop="time" v-if="newNodeForm.type == 'time'">
+                            <el-radio-group v-model="newNodeForm.timeType">
+                                <el-radio-button label="1">自定义</el-radio-button>
+                                <el-radio-button label="2">时间段</el-radio-button>
+                            </el-radio-group>
+                            <el-input v-model="newNodeForm.timeRange1" v-if="newNodeForm.timeType == 1" style="width:100%;margin: 5px 0;"></el-input>
+                            <div class="timeRangeInput">
+                                <div class="timeRange2" v-if="newNodeForm.timeType == 2">
+                                    <span>从 </span><el-input v-model="newNodeForm.timeRange2[0]" style="width: 40%;"></el-input>
+                                    <span>到 </span><el-input v-model="newNodeForm.timeRange2[1]" style="width: 40%"></el-input>
+                                </div>
+                            </div>
+                        </el-form-item>
+                        <el-form-item label="空间范围：" prop="space"  v-if="newNodeForm.type == 'space'">
+                            <el-radio-group v-model="newNodeForm.spaceType">
+                                <el-radio-button label="1">自定义</el-radio-button>
+                                <el-radio-button label="2">两地间</el-radio-button>
+                                <el-radio-button label="3">矩形范围</el-radio-button>
+                            </el-radio-group>
+                            <el-input v-model="newNodeForm.spaceRange1" v-if="newNodeForm.spaceType == 1" style="width:100%;margin: 5px 0;"></el-input>
+                            <div class="timeRangeInput">
+                                <div class="timeRange2" v-if="newNodeForm.spaceType == 2">
+                                    <span>从 </span><el-input v-model="newNodeForm.spaceRange2[0]" style="width: 40%;"></el-input>
+                                    <span>到 </span><el-input v-model="newNodeForm.spaceRange2[1]" style="width: 40%"></el-input>
+                                </div>
+                                <div class="timeRange2" v-if="newNodeForm.spaceType == 3" style="flex-wrap: wrap;">
+                                    <span>上/北：</span><el-input v-model="newNodeForm.spaceRange3[0]" style="width: 35%;"></el-input>
+                                    <span>下/南：</span><el-input v-model="newNodeForm.spaceRange3[2]" style="width: 35%"></el-input>
+                                    <span>左/西：</span><el-input v-model="newNodeForm.spaceRange3[3]" style="width: 35%;"></el-input>
+                                    <span>右/东：</span><el-input v-model="newNodeForm.spaceRange3[1]" style="width: 35%"></el-input>
+                                </div>
+                            </div>
+                        </el-form-item>
+                        <el-form-item label="过程描述：" prop="content" v-if="newNodeForm.type == 'process'">
+                            <el-input v-model="newNodeForm.content" type="textarea" autosize></el-input>
+                        </el-form-item>
+                        <el-form-item label="分组：" prop="group">
+                            <el-switch v-model="newNodeForm.inGroup" style="margin-right: 10px;"></el-switch>
+                            <el-select v-model="newNodeForm.group" class="m-2" placeholder="选择分组" v-if="newNodeForm.inGroup">
+                                <el-option v-for="type in nodeData.group" :key="type.id" :label="type.label || type.id" :value="type.id" />
+                            </el-select>
+                        </el-form-item>
+                        <el-collapse >
+                            <el-collapse-item title="样式设置" name="1">
+                                <el-form-item label="节点颜色：" >
+                                    <el-color-picker v-model="newNodeForm.color" />
+                                </el-form-item>
+                                <el-form-item label="节点边距：" >
+                                    <el-slider v-model="newNodeForm.padding" show-input :min="0" :max="30" :step="1" :show-tooltip="false"></el-slider>
+                                </el-form-item>
+                                <el-form-item label="字体大小：">
+                                    <el-slider v-model="newNodeForm.fontSize" show-input :min="0" :max="30" :step="1" :show-tooltip="false"></el-slider>
+                                </el-form-item>
+                                <el-form-item label="高度：">
+                                    <el-slider v-model="newNodeForm.height" show-input :min="0" :max="30" :step="1" :show-tooltip="false"></el-slider>
+                                </el-form-item>
+                                <el-form-item label="行字符数：">
+                                    <el-slider v-model="newNodeForm.wrap" show-input :min="0" :max="30" :step="1" :show-tooltip="false"></el-slider>
+                                </el-form-item>
+                            </el-collapse-item>
+                        </el-collapse>
+                        <div class="bts">
+                            <el-button @click="closeAddNode">取消</el-button>
+                            <el-button type="primary" @click="addNode">创建</el-button>
+                        </div>
+                    </el-form>
+                </el-dialog>
+            </div>
+        </div>
+        <script src="src/vue.global.js"></script>
+        <script src="src/g6.min.js"></script>
+        <script src="src/SciLink.js"></script>
+        <script src="src/element.full.js"></script>
+        <script src="es5/tex-mml-svg.js"></script>
+        <script src="src/main.js"></script>
+    </body>
+</html>
